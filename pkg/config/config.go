@@ -17,12 +17,20 @@ type Config struct {
 	Elastic  ElasticsearchConfig
 	Auth     AuthConfig
 	LogLevel string
+	Logger   LoggerConfig
 }
 
 // APIConfig contains API server configuration
 type APIConfig struct {
 	Port    int
 	Timeout time.Duration
+}
+
+// LoggerConfig contains logger configuration
+type LoggerConfig struct {
+	Level       string   // debug, info, warn, error, dpanic, panic, fatal
+	Development bool     // if true, uses development mode for better debugging
+	OutputPaths []string // list of paths to write log output to
 }
 
 // AuthConfig contains authentication configuration
@@ -37,72 +45,37 @@ type AuthConfig struct {
 	MicrosoftSecret      string        // Microsoft Entra ID client secret
 	GitHubClientID       string        // GitHub OAuth client ID
 	GitHubClientSecret   string        // GitHub OAuth client secret
-	WeChatAppID          string        // WeChat application ID
-	WeChatSecret         string        // WeChat application secret
+	WeChatAppID          string        // WeChat OAuth app ID
+	WeChatSecret         string        // WeChat OAuth secret
 	CallbackURLBase      string        // Base URL for OAuth callbacks
 }
 
-// GetConfig returns a populated Config instance from Viper
-func GetConfig() *Config {
-	return &Config{
-		API: APIConfig{
-			Port:    viper.GetInt("api.port"),
-			Timeout: viper.GetDuration("api.timeout"),
-		},
-		DB:       *LoadDBConfigFromViper(),
-		Cache:    *LoadCacheConfigFromViper(),
-		Redis:    *LoadRedisConfigFromViper(),
-		Elastic:  *LoadElasticsearchConfigFromViper(),
-		Auth:     *LoadAuthConfigFromViper(),
-		LogLevel: viper.GetString("log.level"),
-	}
-}
-
-// Setup initializes the configuration system
+// Setup loads the configuration from file and environment
 func Setup() (*Config, error) {
-	// Set up configuration defaults
+	// Set up viper configuration
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
 	viper.AddConfigPath("./config")
+	viper.AddConfigPath(".")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
 
-	// Set defaults
+	// Set default values
 	setDefaults()
 
-	// Environment variables override
-	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-
-	// Read configuration
+	// Read the configuration
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// Config file not found, using defaults
-			return GetConfig(), nil
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, err
 		}
-		// Config file found but another error was produced
+	}
+
+	var config Config
+	if err := viper.Unmarshal(&config); err != nil {
 		return nil, err
 	}
 
-	return GetConfig(), nil
-}
-
-// LoadAuthConfigFromViper loads authentication configuration from Viper
-func LoadAuthConfigFromViper() *AuthConfig {
-	return &AuthConfig{
-		JWTSecret:            viper.GetString("auth.jwt_secret"),
-		JWTExpirationTime:    viper.GetDuration("auth.jwt_expiration_time"),
-		RefreshTokenValidity: viper.GetDuration("auth.refresh_token_validity"),
-		GoogleClientID:       viper.GetString("auth.google.client_id"),
-		GoogleClientSecret:   viper.GetString("auth.google.client_secret"),
-		MicrosoftClientID:    viper.GetString("auth.microsoft.client_id"),
-		MicrosoftTenantID:    viper.GetString("auth.microsoft.tenant_id"),
-		MicrosoftSecret:      viper.GetString("auth.microsoft.client_secret"),
-		GitHubClientID:       viper.GetString("auth.github.client_id"),
-		GitHubClientSecret:   viper.GetString("auth.github.client_secret"),
-		WeChatAppID:          viper.GetString("auth.wechat.app_id"),
-		WeChatSecret:         viper.GetString("auth.wechat.secret"),
-		CallbackURLBase:      viper.GetString("auth.callback_url_base"),
-	}
+	return &config, nil
 }
 
 // setDefaults sets default values for all configuration options
@@ -110,6 +83,11 @@ func setDefaults() {
 	// API defaults
 	viper.SetDefault("api.port", 8080)
 	viper.SetDefault("api.timeout", "10s")
+
+	// Logger defaults
+	viper.SetDefault("logger.level", "info")
+	viper.SetDefault("logger.development", false)
+	viper.SetDefault("logger.outputpaths", []string{"stdout"})
 
 	// DB defaults
 	viper.SetDefault("db.host", "localhost")
@@ -140,9 +118,6 @@ func setDefaults() {
 	// Auth defaults
 	viper.SetDefault("auth.jwt_secret", "your-secret-key-change-in-production")
 	viper.SetDefault("auth.jwt_expiration_time", "24h")
-	viper.SetDefault("auth.refresh_token_validity", "720h") // 30 days
+	viper.SetDefault("auth.refresh_token_validity", "168h") // 7 days
 	viper.SetDefault("auth.callback_url_base", "http://localhost:8080")
-
-	// Log defaults
-	viper.SetDefault("log.level", "info")
 }
