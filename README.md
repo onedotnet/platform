@@ -10,6 +10,8 @@ A Go-based backend platform service featuring user, organization, and role manag
 - Comprehensive model validation
 - Multi-layer persistence policy: validate first, cache, then store in database
 - Support for user, organization, and role models
+- Authentication with JWT
+- Multiple OAuth providers support (Google, Microsoft, GitHub, WeChat)
 
 ## Project Structure
 
@@ -34,7 +36,7 @@ platform/
 
 ## Prerequisites
 
-- Go 1.18 or later
+- Go 1.24.2 or later
 - PostgreSQL 12 or later
 - Redis or Elasticsearch (depending on cache configuration)
 
@@ -53,6 +55,20 @@ platform/
    ```
 
 ## API Endpoints
+
+### Authentication
+
+- `POST /api/v1/auth/register` - Register a new user
+- `POST /api/v1/auth/login` - Login with username/email and password
+- `POST /api/v1/auth/refresh-token` - Refresh JWT token
+- `GET /api/v1/auth/google` - Initiate Google OAuth login
+- `GET /api/v1/auth/google/callback` - Google OAuth callback
+- `GET /api/v1/auth/microsoft` - Initiate Microsoft OAuth login
+- `GET /api/v1/auth/microsoft/callback` - Microsoft OAuth callback
+- `GET /api/v1/auth/github` - Initiate GitHub OAuth login
+- `GET /api/v1/auth/github/callback` - GitHub OAuth callback
+- `GET /api/v1/auth/wechat` - Initiate WeChat OAuth login
+- `GET /api/v1/auth/wechat/callback` - WeChat OAuth callback
 
 ### Users
 
@@ -132,4 +148,4 @@ go test -v ./...
 
 ## License
 
-[MIT License](LICENSE)
+[Apache License 2.0](LICENSE)

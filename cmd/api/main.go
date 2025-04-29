@@ -12,12 +12,36 @@ import (
 
 	"github.com/gin-gonic/gin"
 	v1 "github.com/onedotnet/platform/api/v1"
+	_ "github.com/onedotnet/platform/docs" // Import for Swagger
 	"github.com/onedotnet/platform/internal/model"
 	"github.com/onedotnet/platform/internal/service"
 	"github.com/onedotnet/platform/pkg/config"
+	"github.com/onedotnet/platform/pkg/logger"
 	"github.com/onedotnet/platform/pkg/middleware"
+	"github.com/onedotnet/platform/pkg/swagger"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// @title          Platform API
+// @version        1.0
+// @description    Go-based backend platform service featuring user, organization, and role management
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name  OneDotNet Team
+// @contact.url   https://onedotnet.org
+// @contact.email support@onedotnet.org
+
+// @license.name Apache 2.0
+// @license.url  http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host     localhost:8080
+// @BasePath /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Enter the token with the `Bearer: ` prefix, e.g. "Bearer abcde12345".
 
 func main() {
 	log.Println("Starting API server...")
@@ -32,22 +56,32 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
+	// Initialize logger
+	logger.Setup(logger.Config{
+		Level:       cfg.Logger.Level,
+		Development: cfg.Logger.Development,
+		OutputPaths: cfg.Logger.OutputPaths,
+	})
+	defer logger.Sync()
+
+	logger.Log.Info("Logger initialized successfully")
+
 	// Connect to database using the configuration
 	db, err := config.Connect(&cfg.DB)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Log.Fatal("Failed to connect to database", zap.Error(err))
 	}
 
 	// Auto migrate database schemas
 	if err := db.AutoMigrate(&model.User{}, &model.Organization{}, &model.Role{}); err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
+		logger.Log.Fatal("Failed to migrate database", zap.Error(err))
 	}
-	log.Println("Database migration completed successfully")
+	logger.Log.Info("Database migration completed successfully")
 
 	// Create cache using the configuration
 	cacheInstance, err := config.NewCache(&cfg.Cache)
 	if err != nil {
-		log.Fatalf("Failed to create cache: %v", err)
+		logger.Log.Fatal("Failed to create cache", zap.Error(err))
 	}
 	defer cacheInstance.Close()
 
@@ -58,11 +92,22 @@ func main() {
 	authService := service.NewAuthService(repo, cfg.Auth)
 
 	// Set up Gin framework
-	gin.SetMode(gin.ReleaseMode)
+	if cfg.Logger.Development {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	router := gin.New()
-	router.Use(gin.Recovery())
+
+	// Add middleware
 	router.Use(middleware.Logger())
+	router.Use(middleware.ErrorHandler())
+	router.Use(gin.Recovery())
 	router.Use(middleware.CORS())
+
+	// Set up Swagger
+	swagger.Setup(router)
 
 	// API version group
 	apiV1 := router.Group("/api/v1")
@@ -130,9 +175,9 @@ func main() {
 
 	// Start the server in a goroutine
 	go func() {
-		log.Printf("API server listening on port %d", port)
+		logger.Log.Info("API server starting", zap.Int("port", port))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
+			logger.Log.Fatal("Failed to start server", zap.Error(err))
 		}
 	}()
 
@@ -142,7 +187,7 @@ func main() {
 
 	// Block until a signal is received
 	sig := <-quit
-	log.Printf("Received signal %v, shutting down server gracefully...", sig)
+	logger.Log.Info("Received signal, shutting down server gracefully...", zap.String("signal", sig.String()))
 
 	// Create a deadline for shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 15*time.Second)
@@ -150,10 +195,10 @@ func main() {
 
 	// Shut down the server
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Server shutdown failed: %v", err)
+		logger.Log.Fatal("Server shutdown failed", zap.Error(err))
 	}
 
-	log.Println("Server gracefully stopped")
+	logger.Log.Info("Server gracefully stopped")
 }
 
 // monitorSystemHealth periodically checks system health
@@ -165,11 +210,11 @@ func monitorSystemHealth(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Health monitoring stopped")
+			logger.Log.Info("Health monitoring stopped")
 			return
 		case <-ticker.C:
 			// Perform health checks here
-			log.Println("Performing system health check")
+			logger.Log.Debug("Performing system health check")
 		}
 	}
 }
@@ -186,9 +231,9 @@ func createDefaultAdminUser(ctx context.Context, repo service.Repository) {
 			Description: "Administrator role with full access",
 		}
 		if err := repo.CreateRole(ctx, adminRole); err != nil {
-			log.Printf("Error creating admin role: %v", err)
+			logger.Log.Error("Error creating admin role", zap.Error(err))
 		} else {
-			log.Println("Created admin role successfully")
+			logger.Log.Info("Created admin role successfully")
 		}
 	}
 
@@ -201,9 +246,9 @@ func createDefaultAdminUser(ctx context.Context, repo service.Repository) {
 			Description: "Regular user with limited access",
 		}
 		if err := repo.CreateRole(ctx, userRole); err != nil {
-			log.Printf("Error creating user role: %v", err)
+			logger.Log.Error("Error creating user role", zap.Error(err))
 		} else {
-			log.Println("Created user role successfully")
+			logger.Log.Info("Created user role successfully")
 		}
 	}
 
@@ -213,7 +258,7 @@ func createDefaultAdminUser(ctx context.Context, repo service.Repository) {
 		// Create admin user
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
 		if err != nil {
-			log.Printf("Error hashing admin password: %v", err)
+			logger.Log.Error("Error hashing admin password", zap.Error(err))
 			return
 		}
 
@@ -229,7 +274,7 @@ func createDefaultAdminUser(ctx context.Context, repo service.Repository) {
 
 		// Create user
 		if err := repo.CreateUser(ctx, adminUser); err != nil {
-			log.Printf("Error creating admin user: %v", err)
+			logger.Log.Error("Error creating admin user", zap.Error(err))
 			return
 		}
 
@@ -237,10 +282,10 @@ func createDefaultAdminUser(ctx context.Context, repo service.Repository) {
 		if adminRole != nil {
 			adminUser.Roles = []model.Role{*adminRole}
 			if err := repo.UpdateUser(ctx, adminUser); err != nil {
-				log.Printf("Error assigning admin role to admin user: %v", err)
+				logger.Log.Error("Error assigning admin role to admin user", zap.Error(err))
 			}
 		}
 
-		log.Println("Created admin user successfully")
+		logger.Log.Info("Created admin user successfully")
 	}
 }
