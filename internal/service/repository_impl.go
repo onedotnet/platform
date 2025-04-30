@@ -642,3 +642,123 @@ func (r *GormRepository) ListRoles(ctx context.Context, offset, limit int) ([]mo
 
 	return roles, count, nil
 }
+
+// Task repository methods
+
+// CreateTask saves a task to the database
+func (r *GormRepository) CreateTask(ctx context.Context, task *model.Task) error {
+	// Save to database
+	if err := r.db.Create(task).Error; err != nil {
+		return fmt.Errorf("database error: %w", err)
+	}
+
+	// No cache for tasks as they are frequently updated
+	return nil
+}
+
+// GetTask retrieves a task by ID
+func (r *GormRepository) GetTask(ctx context.Context, id uint) (*model.Task, error) {
+	task := &model.Task{}
+
+	// Get from database
+	if err := r.db.First(task, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("task not found: %d", id)
+		}
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+
+	return task, nil
+}
+
+// GetTaskByUUID retrieves a task by UUID
+func (r *GormRepository) GetTaskByUUID(ctx context.Context, uuid uuid.UUID) (*model.Task, error) {
+	task := &model.Task{}
+
+	// Get from database
+	if err := r.db.Where("uuid = ?", uuid).First(task).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("task not found with UUID: %s", uuid)
+		}
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+
+	return task, nil
+}
+
+// GetTaskByMessageID retrieves a task by message ID
+func (r *GormRepository) GetTaskByMessageID(ctx context.Context, messageID string) (*model.Task, error) {
+	task := &model.Task{}
+
+	// Get from database
+	if err := r.db.Where("message_id = ?", messageID).First(task).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("task not found with message ID: %s", messageID)
+		}
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+
+	return task, nil
+}
+
+// UpdateTask updates a task in the database
+func (r *GormRepository) UpdateTask(ctx context.Context, task *model.Task) error {
+	// Update database
+	if err := r.db.Save(task).Error; err != nil {
+		return fmt.Errorf("database error: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteTask removes a task from the database
+func (r *GormRepository) DeleteTask(ctx context.Context, id uint) error {
+	// Check if task exists
+	task, err := r.GetTask(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Delete from database
+	if err := r.db.Delete(task).Error; err != nil {
+		return fmt.Errorf("database error: %w", err)
+	}
+
+	return nil
+}
+
+// ListTasks lists tasks with pagination
+func (r *GormRepository) ListTasks(ctx context.Context, offset, limit int) ([]model.Task, int64, error) {
+	var tasks []model.Task
+	var count int64
+
+	// Get count
+	if err := r.db.Model(&model.Task{}).Count(&count).Error; err != nil {
+		return nil, 0, fmt.Errorf("database error: %w", err)
+	}
+
+	// Get tasks with pagination
+	if err := r.db.Order("created_at DESC").Offset(offset).Limit(limit).Find(&tasks).Error; err != nil {
+		return nil, 0, fmt.Errorf("database error: %w", err)
+	}
+
+	return tasks, count, nil
+}
+
+// ListTasksByStatus lists tasks by status with pagination
+func (r *GormRepository) ListTasksByStatus(ctx context.Context, status model.MessageStatus, offset, limit int) ([]model.Task, int64, error) {
+	var tasks []model.Task
+	var count int64
+
+	// Get count
+	if err := r.db.Model(&model.Task{}).Where("status = ?", status).Count(&count).Error; err != nil {
+		return nil, 0, fmt.Errorf("database error: %w", err)
+	}
+
+	// Get tasks with pagination
+	if err := r.db.Where("status = ?", status).Order("created_at DESC").Offset(offset).Limit(limit).Find(&tasks).Error; err != nil {
+		return nil, 0, fmt.Errorf("database error: %w", err)
+	}
+
+	return tasks, count, nil
+}

@@ -15,6 +15,7 @@ type Config struct {
 	Cache    CacheConfig
 	Redis    RedisConfig
 	Elastic  ElasticsearchConfig
+	RabbitMQ RabbitMQConfig
 	Auth     AuthConfig
 	LogLevel string
 	Logger   LoggerConfig
@@ -114,6 +115,13 @@ func setDefaults() {
 	viper.SetDefault("elasticsearch.username", "")
 	viper.SetDefault("elasticsearch.password", "")
 	viper.SetDefault("elasticsearch.index_name", "platform_cache")
+
+	// RabbitMQ defaults
+	viper.SetDefault("rabbitmq.host", "localhost")
+	viper.SetDefault("rabbitmq.port", 5672)
+	viper.SetDefault("rabbitmq.username", "guest")
+	viper.SetDefault("rabbitmq.password", "guest")
+	viper.SetDefault("rabbitmq.vhost", "/")
 
 	// Auth defaults
 	viper.SetDefault("auth.jwt_secret", "your-secret-key-change-in-production")
