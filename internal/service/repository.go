@@ -39,4 +39,14 @@ type Repository interface {
 	DeleteRole(ctx context.Context, id uint) error
 	DeleteRoleByUUID(ctx context.Context, uuid uuid.UUID) error
 	ListRoles(ctx context.Context, offset, limit int) ([]model.Role, int64, error)
+
+	// Task operations
+	CreateTask(ctx context.Context, task *model.Task) error
+	GetTask(ctx context.Context, id uint) (*model.Task, error)
+	GetTaskByUUID(ctx context.Context, uuid uuid.UUID) (*model.Task, error)
+	GetTaskByMessageID(ctx context.Context, messageID string) (*model.Task, error)
+	UpdateTask(ctx context.Context, task *model.Task) error
+	DeleteTask(ctx context.Context, id uint) error
+	ListTasks(ctx context.Context, offset, limit int) ([]model.Task, int64, error)
+	ListTasksByStatus(ctx context.Context, status model.MessageStatus, offset, limit int) ([]model.Task, int64, error)
 }

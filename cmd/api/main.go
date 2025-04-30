@@ -18,6 +18,7 @@ import (
 	"github.com/onedotnet/platform/pkg/config"
 	"github.com/onedotnet/platform/pkg/logger"
 	"github.com/onedotnet/platform/pkg/middleware"
+	"github.com/onedotnet/platform/pkg/middleware/mq" // Import the new mq package
 	"github.com/onedotnet/platform/pkg/swagger"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -73,7 +74,7 @@ func main() {
 	}
 
 	// Auto migrate database schemas
-	if err := db.AutoMigrate(&model.User{}, &model.Organization{}, &model.Role{}); err != nil {
+	if err := db.AutoMigrate(&model.User{}, &model.Organization{}, &model.Role{}, &model.Task{}); err != nil {
 		logger.Log.Fatal("Failed to migrate database", zap.Error(err))
 	}
 	logger.Log.Info("Database migration completed successfully")
@@ -87,6 +88,16 @@ func main() {
 
 	// Create repository
 	repo := service.NewGormRepository(db, cacheInstance)
+
+	// Initialize RabbitMQ service from mq package
+	mqService, err := mq.GetGlobalMQService(cfg.RabbitMQ, repo)
+	if err != nil {
+		logger.Log.Error("Failed to initialize RabbitMQ service", zap.Error(err))
+		// Continue without RabbitMQ as it's not critical for API functionality
+	} else {
+		defer mqService.Close()
+		logger.Log.Info("RabbitMQ service initialized with queue", zap.String("queue", mqService.GetQueueName()))
+	}
 
 	// Create auth service
 	authService := service.NewAuthService(repo, cfg.Auth)
